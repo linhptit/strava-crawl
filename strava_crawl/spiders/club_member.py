@@ -2,6 +2,7 @@ import os
 import scrapy
 import re
 import csv
+import requests
 
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -154,6 +155,9 @@ class StravaSpider(scrapy.Spider):
                 if title in self.target_titles:
                     athlete.records[title] = convert_to_seconds(record)
 
+        # Send the athlete data to Strapi
+        self.send_to_strapi(athlete)
+
         # Print or store the athlete information
         print(f'Athlete ID: {athlete.athlete_id}, Name: {athlete.name}, Avatar: {athlete.avatar_src}, Records: {athlete.records}')
         # Append the athlete data to the list
@@ -163,6 +167,29 @@ class StravaSpider(scrapy.Spider):
             'avatar_src': athlete.avatar_src,
             'records': athlete.records
         })
+
+    def send_to_strapi(self, athlete):
+        strapi_url = os.getenv('STRAPI_URL') + '/athletes/create-or-update'
+        strapi_token = os.getenv('STRAPI_JWT')
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {strapi_token}'
+        }
+
+        data = {
+            'strava_id': athlete.athlete_id,
+            'name': athlete.name,
+            'avatar_url': athlete.avatar_src,
+            'strava_club_id': self.club_id,
+        }
+
+        response = requests.post(strapi_url, json=data, headers=headers)
+
+        if response.status_code == 200:
+            self.logger.info(f'Successfully sent athlete {athlete.athlete_id} to Strapi')
+        else:
+            self.logger.error(f'Failed to send athlete {athlete.athlete_id} to Strapi: {response.text}')
 
     def close(self, reason):
         # Define the CSV file columns
